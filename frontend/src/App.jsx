@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 
@@ -38,7 +39,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppLayout>
+        <ToastProvider>
+          <AppLayout>
           <Routes>
             <Route
               path="/login"
@@ -82,7 +84,8 @@ export default function App() {
             />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </AppLayout>
+          </AppLayout>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -1,15 +1,24 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import Modal from '../components/Modal';
+import ConfirmModal from '../components/ConfirmModal';
+import { useToast } from '../context/ToastContext';
 import { EmptyState } from './Dashboard';
 
 export default function Projects() {
+  const { addToast } = useToast();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
+
+  // Modal state
+  const [formModal, setFormModal] = useState({ open: false, editId: null });
+  const [confirmModal, setConfirmModal] = useState({ open: false, id: null, name: '' });
+
+  // Form state
   const [form, setForm] = useState({ name: '', description: '' });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchProjects = () => {
     setLoading(true);
@@ -23,18 +32,43 @@ export default function Projects() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+  useEffect(() => { fetchProjects(); }, []);
 
-  const handleCreate = async (e) => {
+  /* ── Open helpers ─────────────────────────────────── */
+
+  const openCreate = () => {
+    setForm({ name: '', description: '' });
+    setError('');
+    setFormModal({ open: true, editId: null });
+  };
+
+  const openEdit = (project) => {
+    setForm({ name: project.name, description: project.description || '' });
+    setError('');
+    setFormModal({ open: true, editId: project.id });
+  };
+
+  const openDelete = (project) => {
+    setConfirmModal({ open: true, id: project.id, name: project.name });
+  };
+
+  /* ── Submit handler (create or update) ────────────── */
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSaving(true);
+    const isEdit = formModal.editId !== null;
+
     try {
-      await api.post('/projects/', form);
-      setModalOpen(false);
-      setForm({ name: '', description: '' });
+      if (isEdit) {
+        await api.patch(`/projects/${formModal.editId}/`, form);
+        addToast('Project updated successfully');
+      } else {
+        await api.post('/projects/', form);
+        addToast('Project created successfully');
+      }
+      setFormModal({ open: false, editId: null });
       fetchProjects();
     } catch (err) {
       const data = err.response?.data;
@@ -44,12 +78,31 @@ export default function Projects() {
           .join(', ');
         setError(msgs);
       } else {
-        setError('Failed to create project.');
+        setError(isEdit ? 'Failed to update project.' : 'Failed to create project.');
       }
     } finally {
       setSaving(false);
     }
   };
+
+  /* ── Delete handler ───────────────────────────────── */
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/projects/${confirmModal.id}/`);
+      addToast(`"${confirmModal.name}" deleted`);
+      setConfirmModal({ open: false, id: null, name: '' });
+      fetchProjects();
+    } catch (err) {
+      addToast(err.response?.data?.detail || 'Failed to delete project.', 'error');
+      setConfirmModal({ open: false, id: null, name: '' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  /* ── Render ───────────────────────────────────────── */
 
   if (loading) {
     return (
@@ -73,11 +126,7 @@ export default function Projects() {
           </p>
         </div>
         <button
-          onClick={() => {
-            setError('');
-            setForm({ name: '', description: '' });
-            setModalOpen(true);
-          }}
+          onClick={openCreate}
           className="inline-flex items-center gap-1.5 self-start rounded-lg bg-brand-600 px-4 py-2 text-[13px] font-semibold text-white shadow-sm shadow-brand-600/20 transition-all hover:bg-brand-700 hover:shadow-md hover:shadow-brand-600/25 active:scale-[0.98] sm:self-auto"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -100,11 +149,7 @@ export default function Projects() {
           description="Create your first project to start organizing tasks."
           action={
             <button
-              onClick={() => {
-                setError('');
-                setForm({ name: '', description: '' });
-                setModalOpen(true);
-              }}
+              onClick={openCreate}
               className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm shadow-brand-600/20 transition-all hover:bg-brand-700 active:scale-[0.98]"
             >
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -125,7 +170,31 @@ export default function Projects() {
               {/* Accent bar */}
               <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-xl bg-gradient-to-r from-brand-500 to-violet-500 opacity-0 transition-opacity group-hover:opacity-100" />
 
-              <h3 className="text-[15px] font-semibold text-slate-900">{p.name}</h3>
+              {/* Action buttons */}
+              <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  onClick={() => openEdit(p)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                  title="Edit project"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => openDelete(p)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                  title="Delete project"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3,6 5,6 21,6" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  </svg>
+                </button>
+              </div>
+
+              <h3 className="pr-16 text-[15px] font-semibold text-slate-900">{p.name}</h3>
               {p.description && (
                 <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-slate-500 line-clamp-2">
                   {p.description}
@@ -156,9 +225,13 @@ export default function Projects() {
         </div>
       )}
 
-      {/* Create Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="New Project">
-        <form onSubmit={handleCreate} className="space-y-5">
+      {/* ── Create / Edit Modal ───────────────────────── */}
+      <Modal
+        open={formModal.open}
+        onClose={() => setFormModal({ open: false, editId: null })}
+        title={formModal.editId ? 'Edit Project' : 'New Project'}
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
             <div className="flex items-start gap-2.5 rounded-lg border border-red-100 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
               <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -197,7 +270,7 @@ export default function Projects() {
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
+              onClick={() => setFormModal({ open: false, editId: null })}
               className="rounded-lg border border-slate-200 px-4 py-2 text-[13px] font-medium text-slate-600 transition-all hover:bg-slate-50 active:scale-[0.98]"
             >
               Cancel
@@ -210,11 +283,28 @@ export default function Projects() {
               {saving && (
                 <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
               )}
-              {saving ? 'Creating…' : 'Create Project'}
+              {saving
+                ? (formModal.editId ? 'Saving…' : 'Creating…')
+                : (formModal.editId ? 'Save Changes' : 'Create Project')}
             </button>
           </div>
         </form>
       </Modal>
+
+      {/* ── Confirm Delete Modal ──────────────────────── */}
+      <ConfirmModal
+        open={confirmModal.open}
+        onClose={() => setConfirmModal({ open: false, id: null, name: '' })}
+        onConfirm={handleDelete}
+        loading={deleting}
+        title="Delete Project"
+        message={
+          <>
+            Are you sure you want to delete <strong className="text-slate-800">"{confirmModal.name}"</strong>?
+            All tasks in this project will also be permanently deleted. This action cannot be undone.
+          </>
+        }
+      />
     </div>
   );
 }

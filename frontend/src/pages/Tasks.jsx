@@ -1,30 +1,38 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
 import Modal from '../components/Modal';
-import { StatusBadge, PriorityBadge, EmptyState } from './Dashboard';
+import ConfirmModal from '../components/ConfirmModal';
+import { useToast } from '../context/ToastContext';
+import { StatusBadge, PriorityBadge, OverdueBadge, isOverdue, EmptyState } from './Dashboard';
 
 const STATUS_OPTIONS = ['todo', 'in_progress', 'done'];
 const PRIORITY_OPTIONS = ['low', 'medium', 'high'];
 
 export default function Tasks() {
+  const { addToast } = useToast();
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ project: '', status: '', priority: '' });
-  const [modalOpen, setModalOpen] = useState(false);
+
+  // Modal state
+  const [formModal, setFormModal] = useState({ open: false, editId: null });
+  const [confirmModal, setConfirmModal] = useState({ open: false, id: null, title: '' });
+
+  // Form state
+  const [form, setForm] = useState({
+    title: '', description: '', project: '', priority: 'medium', due_date: '', assignee: '',
+  });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
   const emptyForm = {
-    title: '',
-    description: '',
-    project: '',
-    priority: 'medium',
-    due_date: '',
-    assignee: '',
+    title: '', description: '', project: '', priority: 'medium', due_date: '', assignee: '',
   };
-  const [form, setForm] = useState(emptyForm);
+
+  /* ── Data fetching ────────────────────────────────── */
 
   const fetchTasks = useCallback(() => {
     setLoading(true);
@@ -43,9 +51,7 @@ export default function Tasks() {
       .finally(() => setLoading(false));
   }, [filters]);
 
-  useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+  useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
   useEffect(() => {
     api
@@ -57,28 +63,60 @@ export default function Tasks() {
       .catch(() => {});
   }, []);
 
+  /* ── Open helpers ─────────────────────────────────── */
+
   const openCreate = async () => {
     setForm(emptyForm);
     setError('');
-    setModalOpen(true);
     try {
       const res = await api.get('/users/');
       setUsers(res.data.results ?? res.data);
-    } catch {
-      setUsers([]);
-    }
+    } catch { setUsers([]); }
+    setFormModal({ open: true, editId: null });
   };
 
-  const handleCreate = async (e) => {
+  const openEdit = async (task) => {
+    setForm({
+      title: task.title,
+      description: task.description || '',
+      project: task.project,
+      priority: task.priority,
+      due_date: task.due_date || '',
+      assignee: task.assignee || '',
+    });
+    setError('');
+    try {
+      const res = await api.get('/users/');
+      setUsers(res.data.results ?? res.data);
+    } catch { setUsers([]); }
+    setFormModal({ open: true, editId: task.id });
+  };
+
+  const openDelete = (task) => {
+    setConfirmModal({ open: true, id: task.id, title: task.title });
+  };
+
+  /* ── Submit handler (create or update) ────────────── */
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSaving(true);
+    const isEdit = formModal.editId !== null;
+
     try {
       const payload = { ...form };
       if (!payload.due_date) delete payload.due_date;
-      if (!payload.assignee) delete payload.assignee;
-      await api.post('/tasks/', payload);
-      setModalOpen(false);
+      if (!payload.assignee) payload.assignee = null;
+
+      if (isEdit) {
+        await api.patch(`/tasks/${formModal.editId}/`, payload);
+        addToast('Task updated successfully');
+      } else {
+        await api.post('/tasks/', payload);
+        addToast('Task created successfully');
+      }
+      setFormModal({ open: false, editId: null });
       fetchTasks();
     } catch (err) {
       const data = err.response?.data;
@@ -88,12 +126,45 @@ export default function Tasks() {
           .join(', ');
         setError(msgs);
       } else {
-        setError('Failed to create task.');
+        setError(isEdit ? 'Failed to update task.' : 'Failed to create task.');
       }
     } finally {
       setSaving(false);
     }
   };
+
+  /* ── Delete handler ───────────────────────────────── */
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete(`/tasks/${confirmModal.id}/`);
+      addToast(`"${confirmModal.title}" deleted`);
+      setConfirmModal({ open: false, id: null, title: '' });
+      fetchTasks();
+    } catch (err) {
+      addToast(err.response?.data?.detail || 'Failed to delete task.', 'error');
+      setConfirmModal({ open: false, id: null, title: '' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  /* ── Quick status change ──────────────────────────── */
+
+  const cycleStatus = async (task) => {
+    const next = { todo: 'in_progress', in_progress: 'done', done: 'todo' };
+    const newStatus = next[task.status];
+    try {
+      await api.patch(`/tasks/${task.id}/`, { status: newStatus });
+      addToast(`Status changed to "${newStatus.replace('_', ' ')}"`);
+      fetchTasks();
+    } catch {
+      addToast('Failed to update status.', 'error');
+    }
+  };
+
+  /* ── Render ───────────────────────────────────────── */
 
   const hasActiveFilters = filters.project || filters.status || filters.priority;
 
@@ -211,15 +282,29 @@ export default function Tasks() {
                   <th className="hidden md:table-cell px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Project</th>
                   <th className="hidden sm:table-cell px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Assignee</th>
                   <th className="hidden lg:table-cell px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Due</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {tasks.map((t) => (
-                  <tr key={t.id} className="transition-colors hover:bg-slate-50/80">
+                {tasks.map((t) => {
+                  const overdue = isOverdue(t);
+                  return (
+                  <tr key={t.id} className={`transition-colors ${overdue ? 'bg-red-50/60 hover:bg-red-50/80' : 'hover:bg-slate-50/80'}`}>
                     <td className="max-w-[220px] truncate px-4 py-3 font-medium text-slate-900">
-                      {t.title}
+                      <div className="flex items-center gap-1.5">
+                        {t.title}
+                        {overdue && <OverdueBadge />}
+                      </div>
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={t.status} /></td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => cycleStatus(t)}
+                        className="cursor-pointer rounded-full transition-transform hover:scale-105 active:scale-95"
+                        title={`Click to change status (currently: ${t.status.replace('_', ' ')})`}
+                      >
+                        <StatusBadge status={t.status} />
+                      </button>
+                    </td>
                     <td className="px-4 py-3"><PriorityBadge priority={t.priority} /></td>
                     <td className="hidden md:table-cell px-4 py-3 text-slate-500">
                       {t.project_name || t.project || <span className="text-slate-300">—</span>}
@@ -229,22 +314,51 @@ export default function Tasks() {
                     </td>
                     <td className="hidden lg:table-cell px-4 py-3">
                       {t.due_date ? (
-                        <span className="text-slate-500">{t.due_date}</span>
+                        <span className={overdue ? 'font-medium text-red-600' : 'text-slate-500'}>{t.due_date}</span>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEdit(t)}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                          title="Edit task"
+                        >
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => openDelete(t)}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                          title="Delete task"
+                        >
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3,6 5,6 21,6" />
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Create Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="New Task">
-        <form onSubmit={handleCreate} className="space-y-5">
+      {/* ── Create / Edit Modal ───────────────────────── */}
+      <Modal
+        open={formModal.open}
+        onClose={() => setFormModal({ open: false, editId: null })}
+        title={formModal.editId ? 'Edit Task' : 'New Task'}
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
             <div className="flex items-start gap-2.5 rounded-lg border border-red-100 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
               <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -343,7 +457,7 @@ export default function Tasks() {
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
+              onClick={() => setFormModal({ open: false, editId: null })}
               className="rounded-lg border border-slate-200 px-4 py-2 text-[13px] font-medium text-slate-600 transition-all hover:bg-slate-50 active:scale-[0.98]"
             >
               Cancel
@@ -356,11 +470,28 @@ export default function Tasks() {
               {saving && (
                 <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
               )}
-              {saving ? 'Creating…' : 'Create Task'}
+              {saving
+                ? (formModal.editId ? 'Saving…' : 'Creating…')
+                : (formModal.editId ? 'Save Changes' : 'Create Task')}
             </button>
           </div>
         </form>
       </Modal>
+
+      {/* ── Confirm Delete Modal ──────────────────────── */}
+      <ConfirmModal
+        open={confirmModal.open}
+        onClose={() => setConfirmModal({ open: false, id: null, title: '' })}
+        onConfirm={handleDelete}
+        loading={deleting}
+        title="Delete Task"
+        message={
+          <>
+            Are you sure you want to delete <strong className="text-slate-800">"{confirmModal.title}"</strong>?
+            This action cannot be undone.
+          </>
+        }
+      />
     </div>
   );
 }

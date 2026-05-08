@@ -1,34 +1,134 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+
+/* ═══════════════════════════════════════════════════════
+   Color tokens — mirrors the purple theme
+   ═══════════════════════════════════════════════════════ */
+const CHART_COLORS = {
+  brand: '#6366f1',
+  brandLight: '#a5b4fc',
+  brandDark: '#4338ca',
+  slate: '#94a3b8',
+  slateLight: '#e2e8f0',
+  emerald: '#10b981',
+  emeraldLight: '#a7f3d0',
+  amber: '#f59e0b',
+  amberLight: '#fde68a',
+  rose: '#f43f5e',
+  roseLight: '#fecdd3',
+  blue: '#3b82f6',
+  blueLight: '#bfdbfe',
+};
+
+/* ── Shared Recharts tooltip style ──────────────────── */
+const tooltipStyle = {
+  contentStyle: {
+    background: '#fff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '10px',
+    fontSize: '13px',
+    boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+    padding: '10px 14px',
+  },
+  itemStyle: { padding: '2px 0' },
+  labelStyle: {
+    fontWeight: 600,
+    color: '#334155',
+    marginBottom: 4,
+    fontSize: '12px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+};
+
+/* ═══════════════════════════════════════════════════════ */
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ projects: 0, tasks: 0, completed: 0 });
-  const [recent, setRecent] = useState([]);
+  const [stats, setStats] = useState({ projects: 0 });
+  const [allTasks, setAllTasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       api.get('/projects/'),
-      api.get('/tasks/?limit=5'),
+      api.get('/tasks/'),
     ])
       .then(([projectsRes, tasksRes]) => {
+        const projectData = projectsRes.data;
         setStats({
-          projects: projectsRes.data.count ?? projectsRes.data.length,
-          tasks: tasksRes.data.count ?? tasksRes.data.length,
-          completed: tasksRes.data.results
-            ? tasksRes.data.results.filter((t) => t.status === 'done').length
-            : tasksRes.data.filter((t) => t.status === 'done').length,
+          projects: projectData.count ?? projectData.length,
         });
-        const results = tasksRes.data.results ?? tasksRes.data;
-        setRecent(Array.isArray(results) ? results.slice(0, 5) : []);
+
+        const taskData = tasksRes.data.results ?? tasksRes.data;
+        setAllTasks(Array.isArray(taskData) ? taskData : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
+  /* ── Derived data for charts ──────────────────────── */
+  const analytics = useMemo(() => {
+    const todo = allTasks.filter((t) => t.status === 'todo').length;
+    const inProgress = allTasks.filter((t) => t.status === 'in_progress').length;
+    const done = allTasks.filter((t) => t.status === 'done').length;
+    const pending = todo + inProgress;
+
+    const low = allTasks.filter((t) => t.priority === 'low').length;
+    const medium = allTasks.filter((t) => t.priority === 'medium').length;
+    const high = allTasks.filter((t) => t.priority === 'high').length;
+
+    return {
+      total: allTasks.length,
+      completed: done,
+      pending,
+      todo,
+      inProgress,
+      done,
+      low,
+      medium,
+      high,
+      completionRate: allTasks.length > 0 ? Math.round((done / allTasks.length) * 100) : 0,
+    };
+  }, [allTasks]);
+
+  const recentTasks = allTasks.slice(0, 5);
+
+  /* ── Chart-ready data arrays ──────────────────────── */
+  const statusData = [
+    { name: 'To Do', value: analytics.todo, fill: CHART_COLORS.slateLight, stroke: CHART_COLORS.slate },
+    { name: 'In Progress', value: analytics.inProgress, fill: CHART_COLORS.blueLight, stroke: CHART_COLORS.blue },
+    { name: 'Done', value: analytics.done, fill: CHART_COLORS.emeraldLight, stroke: CHART_COLORS.emerald },
+  ];
+
+  const completionData = [
+    { name: 'Completed', value: analytics.completed, fill: CHART_COLORS.brand, radius: [6, 6, 0, 0] },
+    { name: 'Pending', value: analytics.pending, fill: CHART_COLORS.slateLight, radius: [6, 6, 0, 0] },
+  ];
+
+  const priorityData = [
+    { name: 'Low', value: analytics.low, fill: CHART_COLORS.slate },
+    { name: 'Medium', value: analytics.medium, fill: CHART_COLORS.amber },
+    { name: 'High', value: analytics.high, fill: CHART_COLORS.rose },
+  ];
+
+  const noData = analytics.total === 0;
+
+  /* ── Loading ──────────────────────────────────────── */
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -40,6 +140,7 @@ export default function Dashboard() {
     );
   }
 
+  /* ── Stat cards config ────────────────────────────── */
   const statCards = [
     {
       label: 'Projects',
@@ -55,7 +156,7 @@ export default function Dashboard() {
     },
     {
       label: 'Total Tasks',
-      value: stats.tasks,
+      value: analytics.total,
       to: '/tasks',
       icon: (
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -70,7 +171,7 @@ export default function Dashboard() {
     },
     {
       label: 'Completed',
-      value: stats.completed,
+      value: analytics.completed,
       to: '/tasks?status=done',
       icon: (
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -83,6 +184,7 @@ export default function Dashboard() {
     },
   ];
 
+  /* ── Render ───────────────────────────────────────── */
   return (
     <div className="animate-fade-in-up mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Greeting */}
@@ -95,7 +197,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Stat cards */}
+      {/* ── Row 1: Stat cards ───────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {statCards.map((s) => (
           <Link
@@ -116,7 +218,168 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Recent tasks */}
+      {/* ── Row 2: Analytics charts ─────────────────── */}
+      <div className="mt-8 grid gap-4 lg:grid-cols-3">
+        {/* Chart 1: Tasks by Status — Donut */}
+        <ChartCard title="Tasks by Status">
+          {noData ? (
+            <ChartEmpty />
+          ) : (
+            <div className="flex flex-col items-center">
+              <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={78}
+                      paddingAngle={3}
+                      strokeWidth={2}
+                      dataKey="value"
+                    >
+                      {statusData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} stroke={entry.stroke} />
+                      ))}
+                    </Pie>
+                    <Tooltip {...tooltipStyle} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Legend */}
+              <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1">
+                {statusData.map((d) => (
+                  <div key={d.name} className="flex items-center gap-1.5 text-[12px] text-slate-500">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: d.stroke }} />
+                    {d.name} ({d.value})
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </ChartCard>
+
+        {/* Chart 2: Completed vs Pending — Bar */}
+        <ChartCard
+          title="Completed vs Pending"
+          headerExtra={
+            !noData && (
+              <span className="ml-auto text-[13px] font-semibold text-brand-600">
+                {analytics.completionRate}%
+              </span>
+            )
+          }
+        >
+          {noData ? (
+            <ChartEmpty />
+          ) : (
+            <>
+              {/* Completion bar */}
+              <div className="mb-4">
+                <div className="mb-1.5 flex items-center justify-between text-[12px]">
+                  <span className="text-slate-500">Completion rate</span>
+                  <span className="font-semibold text-slate-700">{analytics.completionRate}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-violet-500 transition-all duration-700"
+                    style={{ width: `${analytics.completionRate}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Bar chart */}
+              <div className="h-36 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={completionData}
+                    barCategoryGap="20%"
+                    margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
+                  >
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#94a3b8' }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip {...tooltipStyle} />
+                    <Bar dataKey="value" radius={6}>
+                      {completionData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
+        </ChartCard>
+
+        {/* Chart 3: Priority Distribution — Horizontal bars */}
+        <ChartCard title="Priority Distribution">
+          {noData ? (
+            <ChartEmpty />
+          ) : (
+            <div className="space-y-4">
+              {priorityData.map((item) => {
+                const pct = analytics.total > 0 ? Math.round((item.value / analytics.total) * 100) : 0;
+                return (
+                  <PriorityBar
+                    key={item.name}
+                    label={item.label}
+                    value={item.value}
+                    pct={pct}
+                    color={item.fill}
+                    total={analytics.total}
+                  />
+                );
+              })}
+              {/* Mini bar chart visual */}
+              <div className="mt-2 h-28 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={priorityData}
+                    layout="vertical"
+                    barCategoryGap="25%"
+                    margin={{ top: 0, right: 0, left: -10, bottom: 0 }}
+                  >
+                    <XAxis
+                      type="number"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }}
+                      allowDecimals={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                      width={56}
+                    />
+                    <Tooltip {...tooltipStyle} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={18}>
+                      {priorityData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* ── Row 3: Recent tasks ─────────────────────── */}
       <div className="mt-10">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-slate-900">Recent Tasks</h2>
@@ -128,7 +391,7 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {recent.length === 0 ? (
+        {recentTasks.length === 0 ? (
           <EmptyState
             icon={
               <svg className="h-10 w-10 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -166,16 +429,24 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {recent.map((task) => (
-                    <tr key={task.id} className="transition-colors hover:bg-slate-50/80">
-                      <td className="px-4 py-3 font-medium text-slate-900">{task.title}</td>
-                      <td className="px-4 py-3"><StatusBadge status={task.status} /></td>
-                      <td className="px-4 py-3"><PriorityBadge priority={task.priority} /></td>
-                      <td className="hidden sm:table-cell px-4 py-3 text-slate-500">
-                        {task.assignee_name || <span className="text-slate-300">—</span>}
-                      </td>
-                    </tr>
-                  ))}
+                  {recentTasks.map((task) => {
+                    const overdue = isOverdue(task);
+                    return (
+                      <tr key={task.id} className={`transition-colors ${overdue ? 'bg-red-50/60 hover:bg-red-50/80' : 'hover:bg-slate-50/80'}`}>
+                        <td className="px-4 py-3 font-medium text-slate-900">{task.title}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge status={task.status} />
+                            {overdue && <OverdueBadge />}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3"><PriorityBadge priority={task.priority} /></td>
+                        <td className="hidden sm:table-cell px-4 py-3 text-slate-500">
+                          {task.assignee_name || <span className="text-slate-300">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -186,7 +457,70 @@ export default function Dashboard() {
   );
 }
 
-/* ── Shared badge components ────────────────────────── */
+/* ═══════════════════════════════════════════════════════
+   Reusable chart sub-components
+   ═══════════════════════════════════════════════════════ */
+
+function ChartCard({ title, headerExtra, children }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center border-b border-slate-100 px-5 py-3.5">
+        <h3 className="text-[13px] font-semibold text-slate-700">{title}</h3>
+        {headerExtra}
+      </div>
+      <div className="px-5 py-4">{children}</div>
+    </div>
+  );
+}
+
+function ChartEmpty() {
+  return (
+    <div className="flex h-48 items-center justify-center">
+      <p className="text-[13px] text-slate-400">No task data yet</p>
+    </div>
+  );
+}
+
+function PriorityBar({ label, value, pct, color, total }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[12px]">
+        <span className="font-medium capitalize text-slate-600">{label}</span>
+        <span className="text-slate-400">
+          {value} <span className="text-slate-300">/ {total}</span>
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Shared badge & utility exports (used by Tasks.jsx)
+   ═══════════════════════════════════════════════════════ */
+
+export function isOverdue(task) {
+  if (!task.due_date || task.status === 'done') return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(task.due_date + 'T00:00:00') < today;
+}
+
+export function OverdueBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-600">
+      <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+      </svg>
+      Overdue
+    </span>
+  );
+}
 
 export function StatusBadge({ status }) {
   const map = {
@@ -217,8 +551,6 @@ export function PriorityBadge({ priority }) {
     </span>
   );
 }
-
-/* ── Empty state component ──────────────────────────── */
 
 export function EmptyState({ icon, title, description, action }) {
   return (

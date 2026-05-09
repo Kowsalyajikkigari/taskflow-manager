@@ -1,9 +1,19 @@
 import axios from 'axios';
 
+/*
+ * API base URL configuration:
+ *   - Production: full Railway backend URL (baked in at build time)
+ *   - Local dev:  '/api' → proxied by Vite to backend
+ */
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+// Safety net: if VITE_API_URL is set but missing /api suffix, append it
+const baseURL = API_BASE.endsWith('/api')
+  ? API_BASE
+  : `${API_BASE}/api`;
+
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -36,7 +46,7 @@ api.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post(`${API_BASE}/auth/refresh/`, {
+        const { data } = await axios.post(`${baseURL}/auth/refresh/`, {
           refresh,
         });
         localStorage.setItem('access', data.access);

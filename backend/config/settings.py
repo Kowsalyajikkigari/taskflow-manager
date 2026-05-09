@@ -9,9 +9,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
 SECRET_KEY = os.environ.get(
     "SECRET_KEY",
@@ -159,11 +159,19 @@ SIMPLE_JWT = {
 }
 
 
+# ── CSRF Trusted Origins ───────────────────────────────────────────
+# Required to avoid 403 CSRF verification failed on Railway
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    'CSRF_TRUSTED_ORIGINS',
+    'https://taskflow-manager-production-371d.up.railway.app'
+).split(',')
+
+
 # ── CORS Settings ───────────────────────────────────────────────────
 
-CORS_ALLOWED_ORIGINS = os.environ.get(
+CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
-    'http://localhost:5173,http://127.0.0.1:5173'
+    'https://taskflow-manager-production-371d.up.railway.app'
 ).split(',')
 
 CORS_ALLOW_CREDENTIALS = True

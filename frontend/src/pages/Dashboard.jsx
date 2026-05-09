@@ -126,6 +126,22 @@ export default function Dashboard() {
     { name: 'High', value: analytics.high, fill: CHART_COLORS.rose },
   ];
 
+  const userTaskData = (() => {
+    const counts = {};
+    allTasks.forEach((t) => {
+      const name = t.assignee_name || t.created_by_name || 'Unassigned';
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    const COLORS = [CHART_COLORS.brand, CHART_COLORS.emerald, CHART_COLORS.amber, CHART_COLORS.blue, CHART_COLORS.rose, CHART_COLORS.slate];
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value], i) => ({
+        name,
+        value,
+        fill: COLORS[i % COLORS.length],
+      }));
+  })();
+
   const noData = analytics.total === 0;
 
   /* ── Loading ──────────────────────────────────────── */
@@ -219,7 +235,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Row 2: Analytics charts ─────────────────── */}
-      <div className="mt-8 grid gap-4 lg:grid-cols-3">
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
         {/* Chart 1: Tasks by Status — Donut */}
         <ChartCard title="Tasks by Status">
           {noData ? (
@@ -368,6 +384,67 @@ export default function Dashboard() {
                     <Tooltip {...tooltipStyle} />
                     <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={18}>
                       {priorityData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </ChartCard>
+
+        {/* Chart 4: Tasks per User */}
+        <ChartCard title="Tasks per User">
+          {noData || userTaskData.length === 0 ? (
+            <ChartEmpty />
+          ) : (
+            <div className="space-y-3">
+              {userTaskData.map((item) => {
+                const pct = analytics.total > 0 ? Math.round((item.value / analytics.total) * 100) : 0;
+                return (
+                  <div key={item.name}>
+                    <div className="mb-1 flex items-center justify-between text-[12px]">
+                      <span className="font-medium text-slate-600 truncate mr-2">{item.name}</span>
+                      <span className="text-slate-400 whitespace-nowrap">
+                        {item.value} <span className="text-slate-300">· {pct}%</span>
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%`, backgroundColor: item.fill }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="mt-2" style={{ height: '128px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={userTaskData}
+                    layout="vertical"
+                    barCategoryGap="20%"
+                    margin={{ top: 0, right: 0, left: -10, bottom: 0 }}
+                  >
+                    <XAxis
+                      type="number"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }}
+                      allowDecimals={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                      width={72}
+                    />
+                    <Tooltip {...tooltipStyle} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={16}>
+                      {userTaskData.map((entry) => (
                         <Cell key={entry.name} fill={entry.fill} />
                       ))}
                     </Bar>

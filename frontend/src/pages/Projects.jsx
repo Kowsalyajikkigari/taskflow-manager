@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import ConfirmModal from '../components/ConfirmModal';
 import { useToast } from '../context/ToastContext';
@@ -16,6 +17,9 @@ export default function Projects() {
 
   // Form state
   const [form, setForm] = useState({ name: '', description: '' });
+  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [canManageMembers, setCanManageMembers] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -42,10 +46,28 @@ export default function Projects() {
     setFormModal({ open: true, editId: null });
   };
 
-  const openEdit = (project) => {
+  const openEdit = async (project) => {
     setForm({ name: project.name, description: project.description || '' });
     setError('');
+    setSelectedMembers([]);
+    setCanManageMembers(false);
     setFormModal({ open: true, editId: project.id });
+    // Fetch full project detail (includes members list) + user list in parallel
+    const promises = [
+      api.get(`/projects/${project.id}/`).catch(() => null),
+      api.get('/users/').catch(() => null),
+    ];
+    const [detailRes, usersRes] = await Promise.all(promises);
+    if (detailRes?.data?.members) {
+      setSelectedMembers(detailRes.data.members);
+    }
+    if (usersRes?.data) {
+      setAllUsers(usersRes.data.results ?? usersRes.data);
+      setCanManageMembers(true);
+    } else {
+      setAllUsers([]);
+      setCanManageMembers(false);
+    }
   };
 
   const openDelete = (project) => {
@@ -62,7 +84,10 @@ export default function Projects() {
 
     try {
       if (isEdit) {
-        await api.patch(`/projects/${formModal.editId}/`, form);
+        await api.patch(`/projects/${formModal.editId}/`, {
+          ...form,
+          members: canManageMembers ? selectedMembers : undefined,
+        });
         addToast('Project updated successfully');
       } else {
         await api.post('/projects/', form);
@@ -266,6 +291,33 @@ export default function Projects() {
               placeholder="Briefly describe the project…"
             />
           </div>
+
+          {formModal.editId && canManageMembers && (
+            <div>
+              <label className="mb-1.5 block text-[13px] font-medium text-slate-700">
+                Members
+                <span className="ml-1.5 text-[11px] font-normal text-slate-400">(admin only)</span>
+              </label>
+              <select
+                multiple
+                value={selectedMembers}
+                onChange={(e) => {
+                  const values = Array.from(e.target.selectedOptions, (o) => Number(o.value));
+                  setSelectedMembers(values);
+                }}
+                className="h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-all hover:border-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none"
+              >
+                {allUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.username} ({u.role})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                {selectedMembers.length} member{selectedMembers.length !== 1 ? 's' : ''} selected · hold Ctrl/Cmd to select multiple
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-1">
             <button

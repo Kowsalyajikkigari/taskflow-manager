@@ -171,10 +171,12 @@ CORS_ALLOW_CREDENTIALS = True
 # ── Production security (only when DEBUG=False) ──────────────
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000          # 1 year
+    # Disabled for Railway – its proxy handles HTTPS termination.
+    # Enabling these causes ERR_TOO_MANY_REDIRECTS on Railway.
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
     SECURE_HSTS_INCLUDE_SUBDOMAINS = False
     SECURE_HSTS_PRELOAD = False
     SECURE_BROWSER_XSS_FILTER = True

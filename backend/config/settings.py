@@ -9,9 +9,11 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
+# Filter out empty strings from the split
+ALLOWED_HOSTS = [h for h in ALLOWED_HOSTS if h]
 
 SECRET_KEY = os.environ.get(
     "SECRET_KEY",

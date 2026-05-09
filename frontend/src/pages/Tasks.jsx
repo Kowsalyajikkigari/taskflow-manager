@@ -65,17 +65,14 @@ export default function Tasks() {
 
   /* ── Open helpers ─────────────────────────────────── */
 
-  const openCreate = async () => {
+  const openCreate = () => {
     setForm(emptyForm);
     setError('');
-    try {
-      const res = await api.get('/users/');
-      setUsers(res.data.results ?? res.data);
-    } catch { setUsers([]); }
+    setUsers([]);
     setFormModal({ open: true, editId: null });
   };
 
-  const openEdit = async (task) => {
+  const openEdit = (task) => {
     setForm({
       title: task.title,
       description: task.description || '',
@@ -85,10 +82,7 @@ export default function Tasks() {
       assignee: task.assignee || '',
     });
     setError('');
-    try {
-      const res = await api.get('/users/');
-      setUsers(res.data.results ?? res.data);
-    } catch { setUsers([]); }
+    setUsers([]);
     setFormModal({ open: true, editId: task.id });
   };
 

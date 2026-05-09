@@ -226,7 +226,7 @@ export default function Dashboard() {
             <ChartEmpty />
           ) : (
             <div className="flex flex-col items-center">
-              <div className="h-48 w-full">
+            <div style={{ height: '192px' }} className="w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -290,7 +290,7 @@ export default function Dashboard() {
               </div>
 
               {/* Bar chart */}
-              <div className="h-36 w-full">
+              <div style={{ height: '144px' }} className="w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={completionData}
@@ -342,7 +342,7 @@ export default function Dashboard() {
                 );
               })}
               {/* Mini bar chart visual */}
-              <div className="mt-2 h-28 w-full">
+              <div style={{ height: '112px' }} className="w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={priorityData}

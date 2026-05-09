@@ -7,8 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'https://taskflow-manager-production-371d.up.railway.app',
         changeOrigin: true,
+        secure: true,
       },
     },
   },

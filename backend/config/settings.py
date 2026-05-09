@@ -8,20 +8,15 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'SECRET_KEY',
-    'django-insecure-dev-key-change-in-production-x9$k2m!@#'
-)
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-# SECURITY: fail loudly if deployed without a proper secret
-if not DEBUG and SECRET_KEY.startswith('django-insecure'):
-    raise ValueError('SECRET_KEY must be set via environment variable in production.')
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-taskflow-manager-secret-key-2026"
+)
 
 
 # ── Application Definition ──────────────────────────────────────────

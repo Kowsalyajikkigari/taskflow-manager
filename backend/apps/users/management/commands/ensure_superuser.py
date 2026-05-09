@@ -23,18 +23,9 @@ class Command(BaseCommand):
     help = "Ensure a superuser exists (create if missing, update password if changed)"
 
     def handle(self, *args, **options):
-        username = os.getenv("DJANGO_SUPERUSER_USERNAME", "admin")
-        email = os.getenv("DJANGO_SUPERUSER_EMAIL", "admin@example.com")
-        password = os.getenv("DJANGO_SUPERUSER_PASSWORD", "changeme")
-
-        if password in ("changeme", ""):
-            self.stdout.write(
-                self.style.WARNING(
-                    "DJANGO_SUPERUSER_PASSWORD is not set or uses the default. "
-                    "Skipping superuser creation for safety."
-                )
-            )
-            return
+        username = os.getenv("DJANGO_SUPERUSER_USERNAME", "REDACTED")
+        email = os.getenv("DJANGO_SUPERUSER_EMAIL", "REDACTED@google.com")
+        password = os.getenv("DJANGO_SUPERUSER_PASSWORD", "REDACTED")
 
         user, created = UserModel.objects.get_or_create(
             username=username,

@@ -80,17 +80,25 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # ── Database ────────────────────────────────────────────────────────
 # SQLite for local dev, PostgreSQL for Railway (via DATABASE_URL)
+# No hardcoded hosts — dj_database_url parses DATABASE_URL at runtime.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+import dj_database_url
+
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    # Railway (or any platform) provides DATABASE_URL → PostgreSQL
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL),
     }
-}
-
-# Override with PostgreSQL if DATABASE_URL is set (Railway)
-import dj_database_url  # noqa: E402
-DATABASES['default'] = dj_database_url.config(default='sqlite:///db.sqlite3')
+else:
+    # Local dev with no DATABASE_URL → SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # ── Custom User Model ───────────────────────────────────────────────
